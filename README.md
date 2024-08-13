@@ -111,7 +111,8 @@ bun install
 bun install -g wrangler
 wrangler login
 ```
-4.	Create a Neon project at https://console.neon.tech
+
+4.	Create a Neon project. You can [sign up and create one for free](https://neon.tech/ref=github)
 
 5.	Copy environment files and set the `DATABASE_URL` secret to your project's connection string:
 
@@ -128,4 +129,4 @@ bun run deploy
 
 You will be prompted to create a new Cloudflare Pages project. Follow the instructions to create the project and deploy the API.
 
-7.	Add the NEON_DATABASE_URL secret to your Cloudflare Pages project settings.
+7.	Add the `NEON_DATABASE_URL` secret to your Cloudflare Pages project settings.
