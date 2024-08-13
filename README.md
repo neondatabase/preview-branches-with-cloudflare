@@ -36,12 +36,12 @@ The `.github/workflows/production-deployment.yml` file automates the production 
 
 The workflow consists of a single job called `deploy-production`. It includes the following steps:
 
-1. Checks out the codebase using `actions/checkout@v4`.
-2. Sets up the Bun JavaScript runtime using `oven-sh/setup-bun@v1`.
+1. Checks out the codebase using [`actions/checkout@v4`](https://github.com/actions/checkout/tree/v4/).
+2. Sets up the Bun JavaScript runtime using [`oven-sh/setup-bun@v2`](https://github.com/oven-sh/setup-bun/tree/v2/).
 3. Installs project dependencies with `bun install --frozen-lockfile`, ensuring consistent installations across different environments.
 4. Runs database migrations using the command `bun run db:migrate`, utilizing the `DATABASE_URL` secret.
 5. Builds the project with `bun run build`, also using the `DATABASE_URL` secret.
-6. Deploys the API using the `AdrianGonz97/refined-cf-pages-action@v1` action, which is a custom action for deploying to Cloudflare Pages. This step:
+6. Deploys the API using the [`AdrianGonz97/refined-cf-pages-action@v1`](https://github.com/AdrianGonz97/refined-cf-pages-action/tree/v1/) action, which is a custom action for deploying to Cloudflare Pages. This step:
    - Specifies the project name as "preview-branches-with-cloudflare". You will need to adjust this value depending on your Cloudflare Pages project name.
    - Deploys the contents of the `./dist` directory.
    - Sets the deployment name as "production" and targets the `main` branch.
@@ -52,17 +52,17 @@ The `.github/workflows/preview-deployment.yml` file automates the preview deploy
 
 The workflow consists of a single job called `deploy-preview`. It includes the following steps:
 
-1. Checks out the codebase using `actions/checkout@v4`.
-2. Sets up the Bun JavaScript runtime using `oven-sh/setup-bun@v1`.
+1. Checks out the codebase using [`actions/checkout@v4`](https://github.com/actions/checkout/tree/v4/).
+2. Sets up the Bun JavaScript runtime using [`oven-sh/setup-bun@v2`](https://github.com/oven-sh/setup-bun/tree/v2/).
 3. Installs project dependencies with `bun install --frozen-lockfile`, ensuring consistent installations across different environments.
-4. Retrieves the current git branch name using the `tj-actions/branch-names@v8` action.
-5. Creates a new Neon database branch for the preview environment using `neondatabase/create-branch-action@v5`, which:
+4. Retrieves the current git branch name using the [`tj-actions/branch-names@v8`](https://github.com/tj-actions/branch-names/tree/v8/) action.
+5. Creates a new Neon database branch for the preview environment using [`neondatabase/create-branch-action@v5`](https://www.github.com/neondatabase/create-branch-action/tree/v5/), which:
    - Uses the `NEON_PROJECT_ID` and `NEON_API_KEY` for authentication and configuration.
    - Names the new branch `preview/{current_branch_name}`.
 6. Runs database migrations using `bun run db:migrate`, utilizing the newly created database branch URL.
 7. Adds the database connection string to the `wrangler.toml` file for Cloudflare Workers configuration. This will make the database URL available as an environment variable in the Cloudflare Workers environment.
 8. Builds the project with `bun run build`.
-9. Deploys the preview using the `AdrianGonz97/refined-cf-pages-action@v1` action, which:
+9. Deploys the preview using the [`AdrianGonz97/refined-cf-pages-action@v1`](https://github.com/AdrianGonz97/refined-cf-pages-action/tree/v1/) action, which:
    - Uses various secrets for authentication and configuration.
    - Specifies the project name as "preview-branches-with-cloudflare". You will need to adjust this value depending on your Cloudflare Pages project name.
    - Deploys the contents of the `./dist` directory.
