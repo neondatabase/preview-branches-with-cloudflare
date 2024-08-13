@@ -1,15 +1,23 @@
 {
-  "name": "preview-branches-with-cloudflare",
-  "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
-  },
-  "dependencies": {
-    "hono": "^4.5.5"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240806.0",
-    "wrangler": "^3.57.2"
-  }
+	"name": "preview-branches-with-cloudflare",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy --minify",
+		"cf-typegen": "wrangler types --env-interface CloudflareBindings",
+		"db:seed": "bun run ./src/lib/db/seed.ts",
+		"db:generate": "drizzle-kit generate --config=./src/lib/db/config.ts",
+		"db:migrate": "drizzle-kit migrate --config=./src/lib/db/config.ts",
+		"db:studio": "drizzle-kit studio --config=./src/lib/db/config.ts"
+	},
+	"dependencies": {
+		"@neondatabase/serverless": "^0.9.4",
+		"drizzle-orm": "^0.33.0",
+		"hono": "^4.5.5"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20240806.0",
+		"dotenv": "^16.4.5",
+		"drizzle-kit": "^0.24.0",
+		"wrangler": "^3.57.2"
+	}
 }
