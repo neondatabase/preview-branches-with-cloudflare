@@ -1,0 +1,64 @@
+name: Preview Deployment
+on: [pull_request]
+
+env:
+  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Get git branch name
+        id: branch-name
+        uses: tj-actions/branch-names@v8
+
+
+      - id: create-branch
+        uses: neondatabase/create-branch-action@v5
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          username: "neondb_owner" # Change this to the role you use to connect to your database
+          branch_name: preview/${{ steps.branch-name.outputs.current_branch }}
+          api_key: ${{ secrets.NEON_API_KEY }} # Generate an API key in your Neon account settings
+  
+      - run: bun run db:migrate
+        env:
+          DATABASE_URL: ${{ steps.create-branch.outputs.db_url_with_pooler }}
+
+      - name: Add the connection string to wrangler
+        id: add-neon-env-wrangler
+        run: |
+          echo "[vars]" >> wrangler.toml
+          echo "DATABASE_URL = \"${{ steps.create-branch.outputs.db_url_with_pooler }}\"" >> wrangler.toml
+
+      - run: bun run build
+
+      - name: Deploy
+        uses: AdrianGonz97/refined-cf-pages-action@v1
+        id: deploy
+        with:
+          githubToken: ${{ secrets.GH_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: preview-branches-with-cloudflare
+          directory: ./dist
+          deploymentName: ${{ steps.branch-name.outputs.current_branch }}
+          branch: ${{ steps.branch-name.outputs.current_branch }}
+
+      - name: Comment on Pull Request
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }} # Required for commenting on pull requests for private repos
+          message: |
+            Cloudflare Pages Preview URL :balloon: : ${{ steps.deploy.outputs.url }}
+            Neon branch :elephant: : https://console.neon.tech/app/projects/${{ vars.NEON_PROJECT_ID }}/branches/${{ steps.create-branch.outputs.branch_id }}

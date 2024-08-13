@@ -1,0 +1,35 @@
+name: Production Deployment
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - run: bun run db:migrate
+        env: 
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - run: bun run build
+          
+      - name: Deploy API
+        uses: AdrianGonz97/refined-cf-pages-action@v1
+        id: deploy-api
+        with:
+          githubToken: ${{ secrets.GH_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: preview-branches-with-cloudflare
+          directory: ./dist
+          deploymentName: production
+          branch: main     
