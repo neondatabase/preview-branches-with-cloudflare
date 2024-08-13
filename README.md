@@ -88,3 +88,43 @@ The workflow consists of a single job called `delete-preview`. It includes the f
    - Uses the `neondatabase/delete-branch-action@v3.1.3` action.
    - Targets the branch named `preview/{pull_request_branch_name}`.
    - Utilizes the `NEON_PROJECT_ID` and `NEON_API_KEY` for authentication and configuration.
+
+## Setting up the project
+
+
+	1.	Clone the repository:
+
+```bash
+git clone https://github.com/neondatabase/preview-branches-with-cloudflare.git
+cd preview-branches-with-cloudflare
+```
+
+	2.	Install dependencies. You will need to have [Bun installed](https://bun.sh/):
+
+```bash
+bun install
+```
+
+	3.	Install Cloudflare CLI and login:
+
+```bash
+bun install -g wrangler
+wrangler login
+```
+	4.	Create a Neon project at https://console.neon.tech
+
+	5.	Copy environment files and set the `DATABASE_URL` secret to your project's connection string:
+
+```bash
+cp .env.example .env
+cp .dev.vars.example .dev.vars
+```
+
+	6.	Run the deploy command:
+```
+bun run deploy
+```
+
+You will be prompted to create a new Cloudflare Pages project. Follow the instructions to create the project and deploy the API.
+
+	7.	Add the NEON_DATABASE_URL secret to your Cloudflare Pages project settings.
