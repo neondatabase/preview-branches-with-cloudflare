@@ -12,7 +12,7 @@ This is a simple API that uses the following technologies:
 - [Hono](https://hono.dev) - API framework
 - [Bun](https://bun.sh) - Develop, test, run, and bundle JavaScript & TypeScript projects—all with Bun. Bun is an all-in-one JavaScript runtime & toolkit designed for speed, complete with a bundler, test runner, and Node.js-compatible package manager.
 
-## Getting started
+## Getting started test inj
 
 You can copy the files located at `.github/workflows/` and add them to your own project.
 
