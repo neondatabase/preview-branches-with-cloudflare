@@ -2,7 +2,7 @@
 
 This is an example project that shows you can have a Neon Preview database for every Cloudflare Pages Preview Deployment where each database has both the schema and data. The process of creating new Preview Deployments and databases is automated using GitHub Actions.
 
-## Tech stack
+## Tech stacktest
 
 This is a simple API that uses the following technologies:
 - [Neon](https://neon.tech/ref=github) - Managed Postgres
