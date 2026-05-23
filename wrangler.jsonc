@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "preview-branches-with-cloudflare",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-08",
+  "observability": { "enabled": true },
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  /**
+   * Hyperdrive
+   * https://developers.cloudflare.com/hyperdrive/configuration/local-development/
+   *
+   * NOTE: This is to make hyperdrive work for local development. It is replaced
+   * by the deploy.ts script at deploy time.
+   */
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "" }],
+  /**
+   * Placement
+   * https://developers.cloudflare.com/workers/configuration/placement/
+   *
+   * NOTE: It is important to set the region to a region that is closest to your
+   * Neon database.
+   */
+  "placement": { "region": "aws:us-east-1" },
+}

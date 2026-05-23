@@ -1,132 +1,135 @@
 # Preview branches with Cloudflare
 
-This is an example project that shows you can have a Neon Preview database for every Cloudflare Pages Preview Deployment where each database has both the schema and data. The process of creating new Preview Deployments and databases is automated using GitHub Actions.
+> **Beta:** This is a new and novel approach that has not been fully battle-tested in production.
 
-## Tech stack
+This example gives every Cloudflare Workers preview deployment its own isolated [Neon](https://neon.tech/?ref=github) database branch, fronted by a dedicated [Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/) config — created and wired up automatically on every push.
 
-This is a simple API that uses the following technologies:
-- [Neon](https://neon.tech/ref=github) - Managed Postgres
-- [Cloudflare Pages](https://pages.cloudflare.com/) - Deployment platform
-- [GitHub Actions](https://docs.github.com/en/actions) - CI/CD pipeline
-- [Drizzle ORM](https://orm.drizzle.team/) & [Drizzle Kit](https://orm.drizzle.team/kit-docs/overview) - Headless TypeScript ORM and Drizzle ORM SQL migration generator
-- [Hono](https://hono.dev) - API framework
-- [Bun](https://bun.sh) - Develop, test, run, and bundle JavaScript & TypeScript projects—all with Bun. Bun is an all-in-one JavaScript runtime & toolkit designed for speed, complete with a bundler, test runner, and Node.js-compatible package manager.
+A single deploy script (`scripts/deploy.ts`) is run by [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) and drives the whole flow: it creates (or reuses) the Neon branch, provisions Hyperdrive, injects the connection strings, and deploys the Worker — for both production and previews.
 
-## Getting started
+## Highlights
 
-You can copy the files located at `.github/workflows/` and add them to your own project.
-
-You will then need to set the following secrets in your repository:
-
-- `CLOUDFLARE_API_TOKEN`: Grants you access to perform actions on your Cloudflare account via the Cloudflare API. View [Create an API token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) 
-- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID, you can find it in the Cloudflare Dashboard under `Workers & Pages`.
-- `NEON_API_KEY`: Your Neon API key, you can find it in your Neon account settings. View [Manage API Keys](https://neon.tech/docs/manage/api-keys)
-- `DATABASE_URL`: The connection string for your production database. You can find it in your Neon project's connection details. View [Connect to Neon](https://neon.tech/docs/connect/connect-intro)
-- `GH_TOKEN`: A GitHub token with access to your repository, you can create one in your GitHub account settings. You will need to give it access to the repo scope so that the deploy-preview workflow can comment on the pull request.
-
-You will then need to set the following variables:
-
-`NEON_PROJECT_ID`: The ID of your Neon project, you can find it in your Neon project settings.
+- Per-Git-branch preview deploys, each backed by an isolated Neon branch.
+- Cloudflare Hyperdrive set up automatically for every branch, including previews.
 
 ## How it works
 
-### Production Deployment
+Deploys are triggered by the [Cloudflare Workers and Pages GitHub App](https://github.com/apps/cloudflare-workers-and-pages), not by workflows in this repo. On every build, Workers Builds runs `scripts/deploy.ts`, which branches on the Git branch being built:
 
-The `.github/workflows/production-deployment.yml` file automates the production deployment process. It is triggered on push events to the `main` branch.
+- Push to the default branch (`main`) → production deploy, paired with Neon's default branch.
+- Push to any other branch → preview deploy, backed by a Neon branch dedicated to that Git branch and reused across commits.
 
-The workflow consists of a single job called `deploy-production`. It includes the following steps:
+The connection string reaches the Worker as `env.HYPERDRIVE` (Hyperdrive binding) and as plain `env.DATABASE_URL` (pooled) and `env.DATABASE_URL_UNPOOLED` (unpooled) values.
 
-1. Checks out the codebase using [`actions/checkout@v4`](https://github.com/actions/checkout/tree/v4/).
-2. Sets up the Bun JavaScript runtime using [`oven-sh/setup-bun@v2`](https://github.com/oven-sh/setup-bun/tree/v2/).
-3. Installs project dependencies with `bun install --frozen-lockfile`, ensuring consistent installations across different environments.
-4. Runs database migrations using the command `bun run db:migrate`, utilizing the `DATABASE_URL` secret.
-5. Builds the project with `bun run build`, also using the `DATABASE_URL` secret.
-6. Deploys the API using the [`AdrianGonz97/refined-cf-pages-action@v1`](https://github.com/AdrianGonz97/refined-cf-pages-action/tree/v1/) action, which is a custom action for deploying to Cloudflare Pages. This step:
-   - Specifies the project name as "preview-branches-with-cloudflare". You will need to adjust this value depending on your Cloudflare Pages project name.
-   - Deploys the contents of the `./dist` directory.
-   - Sets the deployment name as "production" and targets the `main` branch.
+Hyperdrive is required here, not a nice-to-have: Neon's WebSocket driver doesn't run on Cloudflare Workers, and Neon's HTTP driver doesn't support interactive transactions. That leaves the `pg` TCP driver — and Hyperdrive is what makes TCP Postgres from a Worker fast.
 
-### Preview Deployment
+There are no GitHub Actions workflows and no Neon GitHub App or `create-branch-action` — everything is handled by the one deploy script.
 
-The `.github/workflows/preview-deployment.yml` file automates the preview deployment process for pull requests.
+### Preview flow
 
-The workflow consists of a single job called `deploy-preview`. It includes the following steps:
+1. Push to a non-default Git branch.
+2. The Cloudflare GitHub App triggers a non-production build, which runs `scripts/deploy.ts`.
+3. The script deletes any Hyperdrive config whose Neon branch no longer exists.
+4. It looks up the Neon branch named `preview-<branch-slug>`, reusing it if present or creating it with a 7-day TTL.
+5. It fetches the branch's pooled and unpooled connection URIs.
+6. It upserts a Hyperdrive config named `preview-branches-with-cloudflare--preview--<branch-slug>` pointing at the unpooled URI.
+7. It runs `wrangler versions upload --preview-alias <branch-slug>` with the Hyperdrive binding and the connection strings bundled in.
+8. When the Git branch is deleted, the Neon branch expires via its TTL, and the next deploy removes the orphaned Hyperdrive config.
 
-1. Checks out the codebase using [`actions/checkout@v4`](https://github.com/actions/checkout/tree/v4/).
-2. Sets up the Bun JavaScript runtime using [`oven-sh/setup-bun@v2`](https://github.com/oven-sh/setup-bun/tree/v2/).
-3. Installs project dependencies with `bun install --frozen-lockfile`, ensuring consistent installations across different environments.
-4. Retrieves the current git branch name using the [`tj-actions/branch-names@v8`](https://github.com/tj-actions/branch-names/tree/v8/) action.
-5. Creates a new Neon database branch for the preview environment using [`neondatabase/create-branch-action@v5`](https://www.github.com/neondatabase/create-branch-action/tree/v5/), which:
-   - Uses the `NEON_PROJECT_ID` and `NEON_API_KEY` for authentication and configuration.
-   - Names the new branch `preview/{current_branch_name}`.
-6. Runs database migrations using `bun run db:migrate`, utilizing the newly created database branch URL.
-7. Adds the database connection string to the `wrangler.toml` file for Cloudflare Workers configuration. This will make the database URL available as an environment variable in the Cloudflare Workers environment.
-8. Builds the project with `bun run build`.
-9. Deploys the preview using the [`AdrianGonz97/refined-cf-pages-action@v1`](https://github.com/AdrianGonz97/refined-cf-pages-action/tree/v1/) action, which:
-   - Uses various secrets for authentication and configuration.
-   - Specifies the project name as "preview-branches-with-cloudflare". You will need to adjust this value depending on your Cloudflare Pages project name.
-   - Deploys the contents of the `./dist` directory.
-   - Sets the deployment name and branch to the current branch name.
-10. Comments on the pull request using `thollander/actions-comment-pull-request@v2`, providing:
-    - The Cloudflare Pages preview URL.
-    - A link to the Neon database branch in the Neon console.
+### Production flow
 
-### Cleanup Preview Deployments
+1. Push to the default Git branch (`main`).
+2. The Cloudflare GitHub App triggers a production build, which runs `scripts/deploy.ts`.
+3. The script deletes any Hyperdrive config whose Neon branch no longer exists.
+4. It finds Neon's default branch and fetches its pooled and unpooled connection URIs.
+5. It upserts a Hyperdrive config named `preview-branches-with-cloudflare--production` pointing at the unpooled URI.
+6. It runs `wrangler deploy` with the Hyperdrive binding and the connection strings bundled in.
 
-The `.github/workflows/cleanup-preview-deployment.yml` file automates the cleanup process for preview deployments when a pull request is closed/merged. It is triggered on pull request `closed` events.
+Production credentials are fetched from Neon on every deploy.
 
-The workflow consists of a single job called `delete-preview`. It includes the following steps:
+## Tech stack
 
-1. Deletes Cloudflare Pages preview deployments. It uses a custom shell script to interact with the Cloudflare API:
-   - Retrieves the branch name associated with the closed pull request.
-   - Fetches all deployments for the project and filters those matching the pull request branch.
-   - Iterates through the matching deployments and deletes each one using the Cloudflare API.
-   - Utilizes `curl` for API requests and `jq` for JSON parsing.
-   - Uses the `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` for authentication.
+- [Neon](https://neon.tech/?ref=github) — managed Postgres with database branching
+- [Cloudflare Workers](https://developers.cloudflare.com/workers/) — deployment platform
+- [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) — CI/CD, triggered by the Cloudflare GitHub App
+- [Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/) — connection pooling in front of Postgres
+- [node-postgres (`pg`)](https://node-postgres.com/) — Postgres client
+- [Bun](https://bun.sh) — runtime and package manager
 
-2. Deletes the associated Neon database branch:
-   - Uses the `neondatabase/delete-branch-action@v3.1.3` action.
-   - Targets the branch named `preview/{pull_request_branch_name}`.
-   - Utilizes the `NEON_PROJECT_ID` and `NEON_API_KEY` for authentication and configuration.
+This example ships a minimal Worker that runs one sample query — it demonstrates the preview-branching and connection-injection mechanism, not application code.
 
-## Setting up the project
+### Database migrations
 
+The repo ships a [Drizzle](https://orm.drizzle.team/) schema at [`src/lib/db/schema.ts`](src/lib/db/schema.ts) with the generated SQL under [`src/lib/db/migrations/`](src/lib/db/migrations/). Edit the schema and run `bun run db:generate` to produce a new migration; commit both. Drizzle is used here only as a schema and migrations tool — the Worker itself queries Postgres with vanilla `pg` over Hyperdrive.
 
-1.	Clone the repository:
+### Pre-deploy hook
 
-```bash
-git clone https://github.com/neondatabase/preview-branches-with-cloudflare.git
-cd preview-branches-with-cloudflare
-```
+`scripts/deploy.ts` is project-agnostic. If a sibling [`scripts/pre-deploy.ts`](scripts/pre-deploy.ts) exists, it is invoked after the Neon branch is provisioned and before the Worker is deployed, with `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_BRANCH_ID`, `NEON_BRANCH_NAME`, and `DEPLOY_ENV` in its environment. This repo's hook runs `drizzle-kit migrate` against the unpooled URI, so every preview gets an isolated, fully-migrated database before the Worker version goes live. A non-zero exit fails the deploy; the Neon branch and Hyperdrive config are left intact so the next push retries cleanly. Delete `scripts/pre-deploy.ts` if you don't need it.
 
-2.	Install dependencies. You will need to have [Bun installed](https://bun.sh/):
+## Prerequisites
 
-```bash
-bun install
-```
+- A [Neon project](https://neon.tech/?ref=github) (the free tier is enough).
+- A Neon API key with permission to create branches and read connection strings — see [Manage API keys](https://neon.tech/docs/manage/api-keys).
+- Your Neon project ID.
+- A Cloudflare account.
+- The [Cloudflare Workers and Pages GitHub App](https://github.com/apps/cloudflare-workers-and-pages) installed on your fork of this repository.
 
-3.	Install Cloudflare CLI and login:
+You do not need to create a Cloudflare API token by hand. Workers Builds injects `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` automatically, with the scopes needed to manage Hyperdrive.
 
-```bash
-bun install -g wrangler
-wrangler login
-```
+## Setup
 
-4.	Create a Neon project. You can [sign up and create one for free](https://neon.tech/ref=github)
+1. Clone the repository and install dependencies (you need [Bun](https://bun.sh)):
 
-5.	Copy environment files and set the `DATABASE_URL` secret to your project's connection string:
+   ```bash
+   git clone https://github.com/neondatabase/preview-branches-with-cloudflare.git
+   cd preview-branches-with-cloudflare
+   bun install
+   ```
 
-```bash
-cp .env.example .env
-cp .dev.vars.example .dev.vars
-```
+2. Create a [Neon project](https://neon.tech/?ref=github) (the free tier is enough), choosing a region close to where your Worker will run. Note the **project ID** and create a **Neon API key** for it — see [Manage API keys](https://neon.tech/docs/manage/api-keys). The same project is used for production, previews, and local development.
 
-6.	Run the deploy command:
+3. Set `placement.region` in [`wrangler.jsonc`](wrangler.jsonc) to match your Neon project's region (e.g. `aws:us-east-1`). Keeping compute close to the database is what makes this fast.
 
-```bash
-bun run deploy
-```
+4. In the Cloudflare dashboard, go to **Workers & Pages → Create application → Continue with GitHub** and link this repository. On the **Set up your application** step, set both:
+   - **Deploy command**: `scripts/deploy.ts`
+   - **Non-production branch deploy command**: `scripts/deploy.ts`
 
-You will be prompted to create a new Cloudflare Pages project. Follow the instructions to create the project and deploy the API.
+   Click **Deploy**. The first build fails — expected, the Neon variables aren't set yet. The script decides production vs. preview internally from `WORKERS_CI_BRANCH`.
 
-7.	Add the `NEON_DATABASE_URL` secret to your Cloudflare Pages project settings.
+5. In the Worker's settings, under **Build** (not **Variables and Secrets**), add:
+
+   | Variable             | Type   | Required | Value                                        |
+   | -------------------- | ------ | -------- | -------------------------------------------- |
+   | `NEON_API_KEY`       | Secret | Yes      | The Neon API key                             |
+   | `NEON_PROJECT_ID`    | Text   | Yes      | Your Neon project ID                         |
+   | `GIT_DEFAULT_BRANCH` | Text   | No       | Git default branch name (defaults to `main`) |
+
+6. Rebuild the Worker. The production deploy now succeeds. Open a branch to get a preview deployment with its own Neon branch.
+
+## Local development
+
+1. `cp .env.example .env`
+2. In the **same Neon project** from setup, create a branch for development (e.g. `dev`).
+3. Copy its **pooled** connection string into `DATABASE_URL` in `.env`.
+4. Copy its **unpooled** connection string into both `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` and `DATABASE_URL_UNPOOLED` in `.env`.
+5. Run the app locally:
+
+   ```bash
+   bun run dev
+   ```
+
+After changing bindings in [`wrangler.jsonc`](wrangler.jsonc), regenerate types with `bun run cf-typegen`.
+
+Do not run `wrangler deploy` locally. A local deploy would inherit the latest Worker version's secret (typically the most recent preview's database URL) and clobber production. All deploys go through Workers Builds.
+
+## Notes and limitations
+
+- One Neon branch per Git branch, reused across commits. Test data created during review persists into the next preview deploy. A force-push that rewrites schema-changing commits does not rewind the database.
+- Cleanup is TTL-driven. Abandoned Neon branches expire after 7 days; the TTL is refreshed on every deploy. Orphaned Hyperdrive configs are removed at the start of the next deploy — long-idle projects keep orphans until something deploys again.
+
+## Resources
+
+- [Neon documentation](https://neon.tech/docs)
+- [Neon branching](https://neon.tech/docs/introduction/branching)
+- [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)
+- [Cloudflare Hyperdrive](https://developers.cloudflare.com/hyperdrive/)
+- [neon-preview-deployments](https://github.com/lirbank/neon-preview-deployments) — deeper analysis of preview-deployment strategies across hosting providers

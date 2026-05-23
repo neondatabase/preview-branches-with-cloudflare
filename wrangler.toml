@@ -1,4 +1,0 @@
-#:schema node_modules/wrangler/config-schema.json
-name = "preview-branches-with-cloudflare"
-compatibility_date = "2024-08-06"
-pages_build_output_dir = "./dist"
